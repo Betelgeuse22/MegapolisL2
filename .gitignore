@@ -1,0 +1,16 @@
+# Roblox / Rojo build artifacts
+*.rbxlx.lock
+*.rbxl.lock
+sourcemap.json
+.rojo/
+
+# Antigravity / Agent logs & cache
+.agy/
+*.log
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
