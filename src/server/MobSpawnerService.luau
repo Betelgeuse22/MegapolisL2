@@ -82,15 +82,6 @@ local MOB_OUTFITS: { [string]: OutfitColors } = {
 	},
 }
 
-local BOOTSTRAP_MOB_IDS: { string } = {
-	"SleepingCommuter",
-	"CanCollector",
-	"StationAlchemist",
-	"CardboardKnight",
-	"TicketInspector",
-	"PlatformBaron",
-}
-
 local LEASH_DISTANCE = 80
 local MELEE_ATTACK_RANGE = 6.5
 local MELEE_ATTACK_COOLDOWN = 1.8
@@ -301,57 +292,141 @@ local function playMobAttackSwing(mobModel: Model, targetPosition: Vector3)
 	end)
 end
 
-type SectorSpawnSpec = {
+type ZoneMobEntry = {
 	mobId: string,
-	pos: Vector3,
+	count: number,
 }
 
-local SECTOR_MOB_SPAWNS: { SectorSpawnSpec } = {
-	-- South Avenue & Park Plaza (Lv. 1-3, Z = 130..210, X = -55..55, 28-35 studs apart)
-	{ mobId = "SleepingCommuter", pos = Vector3.new(-48, 3, 132) },
-	{ mobId = "SleepingCommuter", pos = Vector3.new(-16, 3, 140) },
-	{ mobId = "SleepingCommuter", pos = Vector3.new(18, 3, 134) },
-	{ mobId = "SleepingCommuter", pos = Vector3.new(50, 3, 142) },
-	{ mobId = "CanCollector", pos = Vector3.new(-36, 3, 182) },
-	{ mobId = "CanCollector", pos = Vector3.new(0, 3, 194) },
-	{ mobId = "CanCollector", pos = Vector3.new(36, 3, 182) },
-
-	-- West Industrial Cargo Yard (Lv. 5-7, X = -215..-130, Z = -45..65, 30+ studs apart)
-	{ mobId = "StationAlchemist", pos = Vector3.new(-136, 3, -34) },
-	{ mobId = "StationAlchemist", pos = Vector3.new(-142, 3, 8) },
-	{ mobId = "StationAlchemist", pos = Vector3.new(-136, 3, 48) },
-	{ mobId = "CardboardKnight", pos = Vector3.new(-188, 3, -36) },
-	{ mobId = "CardboardKnight", pos = Vector3.new(-198, 3, 10) },
-	{ mobId = "CardboardKnight", pos = Vector3.new(-188, 3, 52) },
-
-	-- East Turnstile & Subway Concourse (Lv. 9, X = 130..215, Z = -45..65, 32+ studs apart)
-	{ mobId = "TicketInspector", pos = Vector3.new(140, 3, -32) },
-	{ mobId = "TicketInspector", pos = Vector3.new(172, 3, 10) },
-	{ mobId = "TicketInspector", pos = Vector3.new(140, 3, 52) },
-
-	-- North Rail Depot Arena (Lv. 10 Raid Boss PlatformBaron + 2x TicketInspector Guards, Z = -215..-160)
-	{ mobId = "PlatformBaron", pos = Vector3.new(0, 3.5, -195) },
-	{ mobId = "TicketInspector", pos = Vector3.new(-28, 3, -172) },
-	{ mobId = "TicketInspector", pos = Vector3.new(28, 3, -172) },
+-- Real Tier 1 mobs (MobsConfig) mapped to workspace.Map.Spawners zones
+local TIER1_ZONE_SPAWNS: { [string]: { ZoneMobEntry } } = {
+	Tier1_McDonalds = {
+		{ mobId = "SleepingCommuter", count = 4 },
+		{ mobId = "CanCollector", count = 3 },
+		{ mobId = "StationAlchemist", count = 2 },
+	},
+	Tier1_RailwayTracks = {
+		{ mobId = "CardboardKnight", count = 4 },
+		{ mobId = "TicketInspector", count = 4 },
+		{ mobId = "PlatformBaron", count = 1 },
+	},
 }
 
-local function bootstrapDefaultSpawns(spawnsFolder: Folder)
-	-- Clear existing spawn points so updated sector coordinates take effect cleanly
-	for _, child in ipairs(spawnsFolder:GetChildren()) do
-		child:Destroy()
+local SPAWN_RAYCAST_HEIGHT_OFFSET = 60
+local SPAWN_RAYCAST_DEPTH = 120
+local SPAWN_HEIGHT_TOLERANCE = 3
+local MAX_SPAWN_POS_ATTEMPTS = 35
+local MIN_MOB_SPAWN_SPACING = 6
+
+local function buildSpawnRaycastParams(spawnerPart: BasePart): RaycastParams
+	local filterList: { Instance } = { spawnerPart }
+
+	local mapFolder = Workspace:FindFirstChild("Map")
+	if mapFolder then
+		local spawnersFolder = mapFolder:FindFirstChild("Spawners")
+		if spawnersFolder then
+			table.insert(filterList, spawnersFolder)
+		end
+		local zonesFolder = mapFolder:FindFirstChild("Zones")
+		if zonesFolder then
+			table.insert(filterList, zonesFolder)
+		end
 	end
 
-	for index, spec in ipairs(SECTOR_MOB_SPAWNS) do
-		local spawnPart = Instance.new("Part")
-		spawnPart.Name = string.format("Spawn_%02d_%s", index, spec.mobId)
-		spawnPart.Size = Vector3.new(2, 1, 2)
-		spawnPart.Position = spec.pos
-		spawnPart.Anchored = true
-		spawnPart.CanCollide = false
-		spawnPart.Transparency = 1
-		spawnPart:SetAttribute("MobId", spec.mobId)
-		spawnPart.Parent = spawnsFolder
+	local activeMobsFolder = Workspace:FindFirstChild("ActiveMobs")
+	if activeMobsFolder then
+		table.insert(filterList, activeMobsFolder)
 	end
+
+	local npcsFolder = Workspace:FindFirstChild("NPCs")
+	if npcsFolder then
+		table.insert(filterList, npcsFolder)
+	end
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character then
+			table.insert(filterList, player.Character)
+		end
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = filterList
+	params.RespectCanCollide = true
+	return params
+end
+
+local function sampleHorizontalPointInSpawner(spawnerPart: BasePart): Vector3
+	if spawnerPart:IsA("Part") and spawnerPart.Shape == Enum.PartType.Cylinder then
+		-- Roblox Cylinder circular base lies in local Y-Z; axis is local X
+		local radius = math.max(0, math.min(spawnerPart.Size.Y, spawnerPart.Size.Z) * 0.5 - 1.5)
+		local angle = math.random() * math.pi * 2
+		local dist = math.sqrt(math.random()) * radius
+		local localOffset = Vector3.new(0, math.cos(angle) * dist, math.sin(angle) * dist)
+		return spawnerPart.CFrame:PointToWorldSpace(localOffset)
+	end
+
+	local halfX = math.max(0, spawnerPart.Size.X * 0.5 - 1.5)
+	local halfZ = math.max(0, spawnerPart.Size.Z * 0.5 - 1.5)
+	local localOffset = Vector3.new(
+		(math.random() * 2 - 1) * halfX,
+		0,
+		(math.random() * 2 - 1) * halfZ
+	)
+	return spawnerPart.CFrame:PointToWorldSpace(localOffset)
+end
+
+local function isTooCloseToActiveMobs(candidatePos: Vector3, minSpacing: number): boolean
+	for model, state in pairs(activeMobStates) do
+		if not state.isDead and model.Parent then
+			local root = MobSpawnerService.GetMobRoot(model)
+			local refPos = if root then root.Position else state.spawnPosition
+			local flatDist = ((refPos - candidatePos) * Vector3.new(1, 0, 1)).Magnitude
+			if flatDist < minSpacing then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function findValidGroundSpawnPosition(spawnerPart: BasePart): Vector3?
+	local groundY = spawnerPart.Position.Y
+	local rayParams = buildSpawnRaycastParams(spawnerPart)
+	local rayDirection = Vector3.new(0, -SPAWN_RAYCAST_DEPTH, 0)
+	local fallbackValidPos: Vector3? = nil
+
+	for _ = 1, MAX_SPAWN_POS_ATTEMPTS do
+		local sample = sampleHorizontalPointInSpawner(spawnerPart)
+		local rayOrigin = Vector3.new(sample.X, groundY + SPAWN_RAYCAST_HEIGHT_OFFSET, sample.Z)
+		local result = Workspace:Raycast(rayOrigin, rayDirection, rayParams)
+
+		if result then
+			local heightDiff = math.abs(result.Position.Y - spawnerPart.Position.Y)
+			if heightDiff <= SPAWN_HEIGHT_TOLERANCE and not GameConstants.IsInSafeZone(result.Position, 3) then
+				if not isTooCloseToActiveMobs(result.Position, MIN_MOB_SPAWN_SPACING) then
+					return result.Position
+				elseif not fallbackValidPos then
+					fallbackValidPos = result.Position
+				end
+			end
+		end
+	end
+
+	if fallbackValidPos then
+		return fallbackValidPos
+	end
+
+	local centerOrigin = Vector3.new(spawnerPart.Position.X, groundY + SPAWN_RAYCAST_HEIGHT_OFFSET, spawnerPart.Position.Z)
+	local centerResult = Workspace:Raycast(centerOrigin, rayDirection, rayParams)
+	if
+		centerResult
+		and math.abs(centerResult.Position.Y - spawnerPart.Position.Y) <= SPAWN_HEIGHT_TOLERANCE
+		and not GameConstants.IsInSafeZone(centerResult.Position, 3)
+	then
+		return centerResult.Position
+	end
+
+	return nil
 end
 
 local function isPlayerAlive(player: Player): (boolean, Model?, Humanoid?, BasePart?)
@@ -422,20 +497,28 @@ local function getTopHatedTarget(state: ActiveMobState): (Instance?, Player?, Mo
 	return bestEntity, bestPlayer, bestBotModel, bestRoot, bestHum
 end
 
-function MobSpawnerService.SpawnMobAt(spawnPoint: BasePart): Model?
-	local mobIdAttr = spawnPoint:GetAttribute("MobId")
-	if type(mobIdAttr) ~= "string" then
+function MobSpawnerService.SpawnMobInZone(spawnerPart: BasePart, mobId: string): Model?
+	local mobData = MobsConfig[mobId]
+	if not mobData then
+		warn(string.format("[MobSpawnerService] Unknown MobId '%s' for spawner %s", mobId, spawnerPart.Name))
 		return nil
 	end
 
-	local mobData = MobsConfig[mobIdAttr]
-	if not mobData then
-		warn(string.format("[MobSpawnerService] Unknown MobId '%s' on spawn point %s", mobIdAttr, spawnPoint.Name))
+	local spawnPos = findValidGroundSpawnPosition(spawnerPart)
+	if not spawnPos then
+		warn(
+			string.format(
+				"[MobSpawnerService] Failed to find valid ground position (<= %d studs from Y=%.2f) for '%s' in zone %s",
+				SPAWN_HEIGHT_TOLERANCE,
+				spawnerPart.Position.Y,
+				mobId,
+				spawnerPart.Name
+			)
+		)
 		return nil
 	end
 
 	local activeMobsFolder = getOrCreateFolder("ActiveMobs")
-	local spawnPos = spawnPoint.Position
 	local model = buildMobRig(mobData, spawnPos)
 	model.Parent = activeMobsFolder
 
@@ -443,7 +526,7 @@ function MobSpawnerService.SpawnMobAt(spawnPoint: BasePart): Model?
 	local state: ActiveMobState = {
 		model = model,
 		mobData = mobData,
-		spawnPoint = spawnPoint,
+		spawnPoint = spawnerPart,
 		spawnPosition = spawnPos,
 		SpawnedAt = now,
 		nextIdleRotateTime = now + (4.0 + math.random() * 2.0),
@@ -461,6 +544,14 @@ function MobSpawnerService.SpawnMobAt(spawnPoint: BasePart): Model?
 
 	activeMobStates[model] = state
 	return model
+end
+
+function MobSpawnerService.SpawnMobAt(spawnPoint: BasePart, overrideMobId: string?): Model?
+	local mobIdAttr = overrideMobId or spawnPoint:GetAttribute("MobId")
+	if type(mobIdAttr) ~= "string" then
+		return nil
+	end
+	return MobSpawnerService.SpawnMobInZone(spawnPoint, mobIdAttr)
 end
 
 function MobSpawnerService.GetMobState(mobModel: Model): ActiveMobState?
@@ -682,6 +773,7 @@ function MobSpawnerService.HandleMobDeath(mobModel: Model)
 
 	local corpseDuration = if isSpoiled then 8.0 else 2.0
 	local spawnPoint = if state then state.spawnPoint else nil
+	local respawnMobId = if state then state.mobData.id else ((mobModel:GetAttribute("MobId") :: string?) or mobModel.Name)
 	local respawnTime = if state then state.mobData.respawnTime else 10
 
 	task.delay(corpseDuration, function()
@@ -694,7 +786,7 @@ function MobSpawnerService.HandleMobDeath(mobModel: Model)
 	if spawnPoint then
 		task.delay(respawnTime, function()
 			if spawnPoint and spawnPoint.Parent then
-				MobSpawnerService.SpawnMobAt(spawnPoint)
+				MobSpawnerService.SpawnMobInZone(spawnPoint, respawnMobId)
 			end
 		end)
 	end
@@ -737,12 +829,7 @@ local function stepMobAI(state: ActiveMobState, now: number)
 	end
 
 	local distFromSpawn = (rootPart.Position - state.spawnPosition).Magnitude
-	local touchedSafeZone = GameConstants.IsInSafeZone(rootPart.Position)
-		or (
-			math.abs(rootPart.Position.X) <= (GameConstants.SAFE_ZONE_HALF_SIZE + 3)
-			and rootPart.Position.Z >= (GameConstants.SAFE_ZONE_MIN_Z - 3)
-			and rootPart.Position.Z <= (GameConstants.SAFE_ZONE_MAX_Z + 3)
-		)
+	local touchedSafeZone = GameConstants.IsInSafeZone(rootPart.Position, 3)
 	if distFromSpawn > LEASH_DISTANCE or touchedSafeZone then
 		table.clear(state.hateList)
 		state.stunnedUntil = 0
@@ -879,15 +966,36 @@ function MobSpawnerService.Init()
 		lastCharacterSpawnTime[player] = nil
 	end)
 
-	local spawnsFolder = getOrCreateFolder("MobSpawns")
 	getOrCreateFolder("ActiveMobs")
 
-	bootstrapDefaultSpawns(spawnsFolder)
+	local mapFolder = Workspace:FindFirstChild("Map") or Workspace:WaitForChild("Map", 3)
+	local spawnersFolder = if mapFolder
+		then (mapFolder:FindFirstChild("Spawners") or mapFolder:WaitForChild("Spawners", 3))
+		else nil
 
-	for _, child in ipairs(spawnsFolder:GetChildren()) do
-		if child:IsA("BasePart") then
-			MobSpawnerService.SpawnMobAt(child)
+	if spawnersFolder then
+		for zoneName, mobEntries in pairs(TIER1_ZONE_SPAWNS) do
+			local spawnerObj = spawnersFolder:FindFirstChild(zoneName)
+			if spawnerObj and spawnerObj:IsA("BasePart") then
+				spawnerObj.CanCollide = false
+				spawnerObj.CanQuery = false
+				for _, entry in ipairs(mobEntries) do
+					for _ = 1, entry.count do
+						MobSpawnerService.SpawnMobInZone(spawnerObj, entry.mobId)
+					end
+				end
+				spawnerObj.Transparency = 1
+			else
+				warn(
+					string.format(
+						"[MobSpawnerService] Spawner zone BasePart '%s' not found in workspace.Map.Spawners",
+						zoneName
+					)
+				)
+			end
 		end
+	else
+		warn("[MobSpawnerService] workspace.Map.Spawners not found; skipping Tier 1 mob spawn.")
 	end
 
 	task.spawn(function()

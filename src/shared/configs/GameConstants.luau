@@ -1,5 +1,7 @@
 --!strict
 
+local Workspace = game:GetService("Workspace")
+
 export type GradeId = "NG" | "D" | "C" | "B" | "A"
 
 export type GradeInfo = {
@@ -49,15 +51,88 @@ GameConstants.PRICE_HP_POTION_PACK = 25
 GameConstants.PRICE_MP_POTION_PACK = 25
 GameConstants.POTION_PACK_AMOUNT = 5
 
--- Phase 4B: Expanded Central Station Plaza Safe Zone Bounds (X in [-85, 85], Z in [-65, 85])
+-- Phase 4B Legacy Fallback Safe Zone Bounds (used only if workspace.Map.Zones.CentralStation_SafeZone is absent)
 GameConstants.SAFE_ZONE_HALF_SIZE = 85
 GameConstants.SAFE_ZONE_MIN_Z = -65
 GameConstants.SAFE_ZONE_MAX_Z = 85
 
-function GameConstants.IsInSafeZone(pos: Vector3): boolean
-	return math.abs(pos.X) <= GameConstants.SAFE_ZONE_HALF_SIZE
-		and pos.Z >= GameConstants.SAFE_ZONE_MIN_Z
-		and pos.Z <= GameConstants.SAFE_ZONE_MAX_Z
+local cachedSafeZone: Instance? = nil
+
+local function getCentralStationSafeZone(): Instance?
+	if cachedSafeZone and cachedSafeZone.Parent then
+		return cachedSafeZone
+	end
+
+	local mapFolder = Workspace:FindFirstChild("Map")
+	if not mapFolder then
+		return nil
+	end
+	local zonesFolder = mapFolder:FindFirstChild("Zones")
+	if not zonesFolder then
+		return nil
+	end
+	local safeZone = zonesFolder:FindFirstChild("CentralStation_SafeZone")
+	if safeZone then
+		cachedSafeZone = safeZone
+		return safeZone
+	end
+
+	return nil
+end
+
+local function isPointInsideZonePart(part: BasePart, pos: Vector3, pad: number): boolean
+	local localPos = part.CFrame:PointToObjectSpace(pos)
+	local half = part.Size * 0.5
+
+	if part:IsA("Part") and part.Shape == Enum.PartType.Cylinder then
+		-- Roblox Cylinder axis is local X; circular cross-section lies in local Y-Z
+		local radius = math.max(half.Y, half.Z) + pad
+		local radialSq = localPos.Y * localPos.Y + localPos.Z * localPos.Z
+		if radialSq > radius * radius then
+			return false
+		end
+		if part.Size.X >= 12 then
+			return math.abs(localPos.X) <= (half.X + pad)
+		end
+		return math.abs(localPos.X) <= (half.X + 60)
+	end
+
+	if math.abs(localPos.X) > (half.X + pad) or math.abs(localPos.Z) > (half.Z + pad) then
+		return false
+	end
+
+	if part.Size.Y >= 12 then
+		return math.abs(localPos.Y) <= (half.Y + pad)
+	end
+
+	return localPos.Y >= -(half.Y + 12) and localPos.Y <= (half.Y + 60)
+end
+
+local function isPointInsideZoneInstance(zone: Instance, pos: Vector3, pad: number): boolean
+	if zone:IsA("BasePart") then
+		return isPointInsideZonePart(zone, pos, pad)
+	end
+	for _, descendant in ipairs(zone:GetDescendants()) do
+		if descendant:IsA("BasePart") and isPointInsideZonePart(descendant, pos, pad) then
+			return true
+		end
+	end
+	return false
+end
+
+function GameConstants.IsInSafeZone(pos: Vector3, margin: number?): boolean
+	local pad = margin or 0
+	local safeZone = getCentralStationSafeZone()
+	if safeZone then
+		if safeZone:GetAttribute("IsSafeZone") ~= true then
+			return false
+		end
+		return isPointInsideZoneInstance(safeZone, pos, pad)
+	end
+
+	return math.abs(pos.X) <= (GameConstants.SAFE_ZONE_HALF_SIZE + pad)
+		and pos.Z >= (GameConstants.SAFE_ZONE_MIN_Z - pad)
+		and pos.Z <= (GameConstants.SAFE_ZONE_MAX_Z + pad)
 end
 
 function GameConstants.GetEnchantSuccessChance(currentLevel: number): number

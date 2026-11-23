@@ -310,7 +310,7 @@ local function getHorizontalDistance(posA: Vector3, posB: Vector3): number
 end
 
 local function getBasicAttackStopRange(): number
-	local classId = LocalPlayer:GetAttribute("ClassId")
+	local classId = if localPlayer then localPlayer:GetAttribute("ClassId") else nil
 	if typeof(classId) == "string" and ClassesConfig[classId] then
 		local r = ClassesConfig[classId].attackRange
 		if r and r >= 15 then
