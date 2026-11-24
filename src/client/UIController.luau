@@ -361,6 +361,8 @@ local workshopUI = {
 	shopBuyMpPotionsBtn = nil :: any,
 	shopBuyNewWeaponBtn = nil :: any,
 	invEnchantHeaderLabel = nil :: any,
+	enchantColStroke = nil :: UIStroke?,
+	kioskColStroke = nil :: UIStroke?,
 	enchantWeaponCard = nil :: any,
 	enchantWeaponCardStroke = nil :: any,
 	enchantWeaponNameLabel = nil :: any,
@@ -424,6 +426,23 @@ local creationUI = {
 	charCreateConfirmBtn = nil :: any,
 	creationRaceButtons = {} :: { [string]: TextButton },
 	creationClassButtons = {} :: { [string]: TextButton },
+}
+
+type WelcomeGuideCardUI = {
+	titleKey: string,
+	descKey: string,
+	titleLabel: TextLabel,
+	descLabel: TextLabel,
+}
+
+local welcomeUI = {
+	btnHelp = nil :: TextButton?,
+	modal = nil :: Frame?,
+	titleLabel = nil :: TextLabel?,
+	subtitleLabel = nil :: TextLabel?,
+	confirmBtn = nil :: TextButton?,
+	cards = {} :: { WelcomeGuideCardUI },
+	hasShownInitialGuide = false,
 }
 
 local targetHpSignalConn: RBXScriptConnection? = nil
@@ -1787,11 +1806,49 @@ local function refreshPlayerHud()
 	btnInventory.Text = I18n.t("UI_BTN_INVENTORY")
 	btnJob.Text = I18n.t("UI_BTN_JOB")
 	btnStats.Text = I18n.t("UI_BTN_STATS")
+	if welcomeUI.btnHelp then
+		welcomeUI.btnHelp.Text = I18n.t("UI_BTN_HELP")
+	end
 	btnLang.Text = I18n.t("UI_BTN_LANG", { lang = string.upper(I18n.GetLanguage()) })
+
+	if welcomeUI.titleLabel then
+		welcomeUI.titleLabel.Text = I18n.t("UI_WELCOME_GUIDE_TITLE")
+	end
+	if welcomeUI.subtitleLabel then
+		welcomeUI.subtitleLabel.Text = I18n.t("UI_WELCOME_GUIDE_SUBTITLE")
+	end
+	if welcomeUI.confirmBtn then
+		welcomeUI.confirmBtn.Text = I18n.t("UI_WELCOME_GUIDE_CONFIRM")
+	end
+	for _, card in ipairs(welcomeUI.cards) do
+		card.titleLabel.Text = I18n.t(card.titleKey)
+		card.descLabel.Text = I18n.t(card.descKey)
+	end
 
 	refreshHotbarLabels()
 	refreshPartyWindow()
 	refreshModals()
+end
+
+local function applyWorkshopFocus(focusRole: string?)
+	if workshopUI.enchantColStroke then
+		if focusRole == "Blacksmith" then
+			workshopUI.enchantColStroke.Color = Color3.fromRGB(255, 215, 95)
+			workshopUI.enchantColStroke.Thickness = 2
+		else
+			workshopUI.enchantColStroke.Color = L2_SUB_BORDER
+			workshopUI.enchantColStroke.Thickness = 1
+		end
+	end
+	if workshopUI.kioskColStroke then
+		if focusRole == "Merchant" then
+			workshopUI.kioskColStroke.Color = Color3.fromRGB(95, 235, 255)
+			workshopUI.kioskColStroke.Thickness = 2
+		else
+			workshopUI.kioskColStroke.Color = L2_SUB_BORDER
+			workshopUI.kioskColStroke.Thickness = 1
+		end
+	end
 end
 
 local function toggleModal(targetModal: Frame)
@@ -1799,10 +1856,13 @@ local function toggleModal(targetModal: Frame)
 		return
 	end
 	local willShow = not targetModal.Visible
-	if not willShow and targetModal == inventoryModal then
-		hoveredTooltipData = nil
-		if itemTooltipFrame then
-			itemTooltipFrame.Visible = false
+	if targetModal == inventoryModal then
+		applyWorkshopFocus(nil)
+		if not willShow then
+			hoveredTooltipData = nil
+			if itemTooltipFrame then
+				itemTooltipFrame.Visible = false
+			end
 		end
 	end
 	targetModal.Visible = willShow
@@ -2953,23 +3013,23 @@ local function buildInterface()
 	end)
 
 	-- =====================================================================
-	-- 7. BOTTOM-RIGHT: SYSTEM & INVENTORY MENU BUTTONS (2x2 Grid, Positioned at Bottom Edge)
+	-- 7. BOTTOM-RIGHT: SYSTEM & INVENTORY MENU BUTTONS (Positioned at Bottom Edge)
 	-- =====================================================================
 	local menuBarFrame = Instance.new("Frame")
 	menuBarFrame.Name = "SystemMenuButtons"
 	menuBarFrame.AnchorPoint = Vector2.new(1, 1)
 	menuBarFrame.Position = UDim2.new(1, -12, 1, -2)
-	menuBarFrame.Size = UDim2.fromOffset(236, 56)
+	menuBarFrame.Size = UDim2.fromOffset(236, 81)
 	menuBarFrame.BackgroundColor3 = L2_BG_COLOR
 	menuBarFrame.BackgroundTransparency = 0.08
 	menuBarFrame.BorderSizePixel = 0
 	menuBarFrame.Parent = screenGui
 	styleL2Frame(menuBarFrame, 6, L2_GOLD_BORDER, 1.6)
 
-	local function createMenuButton(name: string, pos: UDim2): TextButton
+	local function createMenuButton(name: string, pos: UDim2, width: number?): TextButton
 		local btn = Instance.new("TextButton")
 		btn.Name = name
-		btn.Size = UDim2.fromOffset(108, 22)
+		btn.Size = UDim2.fromOffset(width or 108, 22)
 		btn.Position = pos
 		btn.BackgroundColor3 = L2_PANEL_COLOR
 		btn.BorderSizePixel = 0
@@ -2985,7 +3045,8 @@ local function buildInterface()
 	btnInventory = createMenuButton("BtnInventory", UDim2.fromOffset(8, 4))
 	btnJob = createMenuButton("BtnJob", UDim2.fromOffset(120, 4))
 	btnStats = createMenuButton("BtnStats", UDim2.fromOffset(8, 29))
-	btnLang = createMenuButton("BtnLang", UDim2.fromOffset(120, 29))
+	welcomeUI.btnHelp = createMenuButton("BtnHelp", UDim2.fromOffset(120, 29))
+	btnLang = createMenuButton("BtnLang", UDim2.fromOffset(8, 54), 220)
 
 	-- =====================================================================
 	-- MODALS: [I] Inventory, [C] Stats, [J] Job & Subclass Dossier
@@ -3710,6 +3771,7 @@ local function buildInterface()
 		enchantCol.ZIndex = 13
 		enchantCol.Parent = workshopTabContainer
 		styleL2Frame(enchantCol, 4, L2_SUB_BORDER, 1)
+		workshopUI.enchantColStroke = enchantCol:FindFirstChildOfClass("UIStroke")
 
 		workshopUI.invEnchantHeaderLabel = Instance.new("TextLabel")
 		workshopUI.invEnchantHeaderLabel.Size = UDim2.new(1, -12, 0, 20)
@@ -3822,6 +3884,7 @@ local function buildInterface()
 		kioskCol.ZIndex = 13
 		kioskCol.Parent = workshopTabContainer
 		styleL2Frame(kioskCol, 4, L2_SUB_BORDER, 1)
+		workshopUI.kioskColStroke = kioskCol:FindFirstChildOfClass("UIStroke")
 
 		workshopUI.invShopHeaderLabel = Instance.new("TextLabel")
 		workshopUI.invShopHeaderLabel.Size = UDim2.new(1, -12, 0, 20)
@@ -4425,6 +4488,295 @@ local function buildInterface()
 			}
 			creationUI.charCreationScreen.Visible = false
 			Remotes.CreateCharacter:FireServer(selectedCreationRace, selectedCreationClass, selectedCreationGender)
+			if not welcomeUI.hasShownInitialGuide and welcomeUI.modal then
+				welcomeUI.hasShownInitialGuide = true
+				welcomeUI.modal.Visible = true
+				if workshopUI.bringWindowToFront then
+					workshopUI.bringWindowToFront(welcomeUI.modal)
+				end
+			end
+		end)
+	end
+
+	-- =====================================================================
+	-- [H] LINEAGE 2 STYLE WELCOME GUIDE / STARTER TUTORIAL MODAL
+	-- =====================================================================
+	do
+		local guideModal = Instance.new("Frame")
+		guideModal.Name = "WelcomeGuideModal"
+		guideModal.Size = UDim2.fromOffset(524, 444)
+		guideModal.AnchorPoint = Vector2.new(0.5, 0.5)
+		guideModal.Position = UDim2.fromScale(0.5, 0.5)
+		guideModal.BackgroundColor3 = L2_BG_COLOR
+		guideModal.BackgroundTransparency = 0.03
+		guideModal.BorderSizePixel = 0
+		guideModal.Visible = false
+		guideModal.Active = true
+		guideModal.ZIndex = 10
+		guideModal.Parent = screenGui
+		styleL2Frame(guideModal, 8, L2_GOLD_BORDER, 2)
+		table.insert(workshopUI.windowFocusOrder, guideModal)
+		welcomeUI.modal = guideModal
+
+		guideModal.InputBegan:Connect(function(input: InputObject)
+			if
+				input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.MouseButton2
+			then
+				if workshopUI.bringWindowToFront then
+					workshopUI.bringWindowToFront(guideModal)
+				end
+			end
+		end)
+
+		local headerBar = Instance.new("Frame")
+		headerBar.Name = "HeaderDragBar"
+		headerBar.Size = UDim2.new(1, -46, 0, 52)
+		headerBar.Position = UDim2.fromOffset(6, 6)
+		headerBar.BackgroundColor3 = Color3.fromRGB(22, 26, 38)
+		headerBar.BackgroundTransparency = 0.25
+		headerBar.BorderSizePixel = 0
+		headerBar.Active = true
+		headerBar.ZIndex = 11
+		headerBar.Parent = guideModal
+		local headerCorner = Instance.new("UICorner")
+		headerCorner.CornerRadius = UDim.new(0, 6)
+		headerCorner.Parent = headerBar
+
+		headerBar.InputBegan:Connect(function(input: InputObject)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				if workshopUI.bringWindowToFront then
+					workshopUI.bringWindowToFront(guideModal)
+				end
+				workshopUI.draggingWindow = guideModal
+				workshopUI.windowDragStartMouse = Vector2.new(input.Position.X, input.Position.Y)
+				local absPos = guideModal.AbsolutePosition
+				local absSize = guideModal.AbsoluteSize
+				workshopUI.windowDragStartPos = Vector2.new(
+					absPos.X + absSize.X * guideModal.AnchorPoint.X,
+					absPos.Y + absSize.Y * guideModal.AnchorPoint.Y
+				)
+			end
+		end)
+
+		local titleLabel = Instance.new("TextLabel")
+		titleLabel.Name = "WelcomeTitle"
+		titleLabel.Size = UDim2.new(1, -20, 0, 24)
+		titleLabel.Position = UDim2.fromOffset(12, 6)
+		titleLabel.BackgroundTransparency = 1
+		titleLabel.Font = Enum.Font.GothamBold
+		titleLabel.TextSize = 17
+		titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+		titleLabel.TextColor3 = Color3.fromRGB(255, 222, 110)
+		titleLabel.ZIndex = 12
+		titleLabel.Parent = headerBar
+		welcomeUI.titleLabel = titleLabel
+
+		local subtitleLabel = Instance.new("TextLabel")
+		subtitleLabel.Name = "WelcomeSubtitle"
+		subtitleLabel.Size = UDim2.new(1, -20, 0, 16)
+		subtitleLabel.Position = UDim2.fromOffset(12, 31)
+		subtitleLabel.BackgroundTransparency = 1
+		subtitleLabel.Font = Enum.Font.GothamMedium
+		subtitleLabel.TextSize = 11
+		subtitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+		subtitleLabel.TextColor3 = Color3.fromRGB(165, 178, 204)
+		subtitleLabel.ZIndex = 12
+		subtitleLabel.Parent = headerBar
+		welcomeUI.subtitleLabel = subtitleLabel
+
+		local closeXBtn = Instance.new("TextButton")
+		closeXBtn.Name = "CloseXBtn"
+		closeXBtn.Size = UDim2.fromOffset(30, 30)
+		closeXBtn.Position = UDim2.new(1, -36, 0, 10)
+		closeXBtn.BackgroundColor3 = Color3.fromRGB(58, 24, 28)
+		closeXBtn.BorderSizePixel = 0
+		closeXBtn.Font = Enum.Font.GothamBold
+		closeXBtn.TextSize = 14
+		closeXBtn.TextColor3 = Color3.fromRGB(255, 225, 225)
+		closeXBtn.Text = "X"
+		closeXBtn.AutoButtonColor = true
+		closeXBtn.ZIndex = 12
+		closeXBtn.Parent = guideModal
+		styleL2Frame(closeXBtn, 5, L2_SUB_BORDER, 1.2)
+		closeXBtn.Activated:Connect(function()
+			guideModal.Visible = false
+		end)
+
+		local goldDivider = Instance.new("Frame")
+		goldDivider.Name = "GoldDivider"
+		goldDivider.Size = UDim2.new(1, -24, 0, 1)
+		goldDivider.Position = UDim2.fromOffset(12, 64)
+		goldDivider.BackgroundColor3 = L2_GOLD_BORDER
+		goldDivider.BackgroundTransparency = 0.5
+		goldDivider.BorderSizePixel = 0
+		goldDivider.ZIndex = 11
+		goldDivider.Parent = guideModal
+
+		local cardsContainer = Instance.new("Frame")
+		cardsContainer.Name = "GuideCardsContainer"
+		cardsContainer.Size = UDim2.new(1, -24, 0, 304)
+		cardsContainer.Position = UDim2.fromOffset(12, 74)
+		cardsContainer.BackgroundTransparency = 1
+		cardsContainer.ZIndex = 11
+		cardsContainer.Parent = guideModal
+
+		local cardsLayout = Instance.new("UIListLayout")
+		cardsLayout.FillDirection = Enum.FillDirection.Vertical
+		cardsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		cardsLayout.Padding = UDim.new(0, 8)
+		cardsLayout.Parent = cardsContainer
+
+		table.clear(welcomeUI.cards)
+
+		local guideBlocks = {
+			{
+				tag = "⚔",
+				accent = Color3.fromRGB(255, 196, 68),
+				titleKey = "UI_GUIDE_COMBAT_TITLE",
+				descKey = "UI_GUIDE_COMBAT_DESC",
+			},
+			{
+				tag = "U",
+				accent = Color3.fromRGB(72, 198, 255),
+				titleKey = "UI_GUIDE_UBAHN_TITLE",
+				descKey = "UI_GUIDE_UBAHN_DESC",
+			},
+			{
+				tag = "[E]",
+				accent = Color3.fromRGB(78, 224, 148),
+				titleKey = "UI_GUIDE_NPC_TITLE",
+				descKey = "UI_GUIDE_NPC_DESC",
+			},
+			{
+				tag = "PvP",
+				accent = Color3.fromRGB(244, 98, 98),
+				titleKey = "UI_GUIDE_ZONES_TITLE",
+				descKey = "UI_GUIDE_ZONES_DESC",
+			},
+		}
+
+		for idx, block in ipairs(guideBlocks) do
+			local card = Instance.new("Frame")
+			card.Name = "GuideCard_" .. tostring(idx)
+			card.LayoutOrder = idx
+			card.Size = UDim2.new(1, 0, 0, 70)
+			card.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
+			card.BackgroundTransparency = 0.06
+			card.BorderSizePixel = 0
+			card.ZIndex = 12
+			card.Parent = cardsContainer
+
+			local cardCorner = Instance.new("UICorner")
+			cardCorner.CornerRadius = UDim.new(0, 6)
+			cardCorner.Parent = card
+
+			local cardStroke = Instance.new("UIStroke")
+			cardStroke.Color = block.accent
+			cardStroke.Transparency = 0.55
+			cardStroke.Thickness = 1.2
+			cardStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			cardStroke.Parent = card
+
+			local accentBar = Instance.new("Frame")
+			accentBar.Name = "AccentStrip"
+			accentBar.Size = UDim2.new(0, 4, 1, -12)
+			accentBar.Position = UDim2.fromOffset(6, 6)
+			accentBar.BackgroundColor3 = block.accent
+			accentBar.BorderSizePixel = 0
+			accentBar.ZIndex = 13
+			accentBar.Parent = card
+			local accentCorner = Instance.new("UICorner")
+			accentCorner.CornerRadius = UDim.new(0, 2)
+			accentCorner.Parent = accentBar
+
+			local iconBadge = Instance.new("Frame")
+			iconBadge.Name = "IconBadge"
+			iconBadge.Size = UDim2.fromOffset(42, 42)
+			iconBadge.Position = UDim2.fromOffset(18, 14)
+			iconBadge.BackgroundColor3 = block.accent
+			iconBadge.BackgroundTransparency = 0.82
+			iconBadge.BorderSizePixel = 0
+			iconBadge.ZIndex = 13
+			iconBadge.Parent = card
+			local badgeCorner = Instance.new("UICorner")
+			badgeCorner.CornerRadius = UDim.new(0, 6)
+			badgeCorner.Parent = iconBadge
+			local badgeStroke = Instance.new("UIStroke")
+			badgeStroke.Color = block.accent
+			badgeStroke.Transparency = 0.25
+			badgeStroke.Thickness = 1.2
+			badgeStroke.Parent = iconBadge
+
+			local badgeText = Instance.new("TextLabel")
+			badgeText.Name = "TagText"
+			badgeText.Size = UDim2.fromScale(1, 1)
+			badgeText.BackgroundTransparency = 1
+			badgeText.Font = Enum.Font.GothamBold
+			badgeText.TextSize = if (utf8.len(block.tag) or #block.tag) <= 2 then 18 else 13
+			badgeText.TextColor3 = block.accent
+			badgeText.Text = block.tag
+			badgeText.ZIndex = 14
+			badgeText.Parent = iconBadge
+
+			local cardTitle = Instance.new("TextLabel")
+			cardTitle.Name = "CardTitle"
+			cardTitle.Size = UDim2.new(1, -80, 0, 20)
+			cardTitle.Position = UDim2.fromOffset(70, 8)
+			cardTitle.BackgroundTransparency = 1
+			cardTitle.Font = Enum.Font.GothamBold
+			cardTitle.TextSize = 13
+			cardTitle.TextXAlignment = Enum.TextXAlignment.Left
+			cardTitle.TextColor3 = block.accent
+			cardTitle.ZIndex = 13
+			cardTitle.Parent = card
+
+			local cardDesc = Instance.new("TextLabel")
+			cardDesc.Name = "CardDesc"
+			cardDesc.Size = UDim2.new(1, -80, 0, 36)
+			cardDesc.Position = UDim2.fromOffset(70, 28)
+			cardDesc.BackgroundTransparency = 1
+			cardDesc.Font = Enum.Font.GothamMedium
+			cardDesc.TextSize = 12
+			cardDesc.TextWrapped = true
+			cardDesc.TextXAlignment = Enum.TextXAlignment.Left
+			cardDesc.TextYAlignment = Enum.TextYAlignment.Top
+			cardDesc.TextColor3 = Color3.fromRGB(224, 230, 242)
+			cardDesc.ZIndex = 13
+			cardDesc.Parent = card
+
+			table.insert(welcomeUI.cards, {
+				titleKey = block.titleKey,
+				descKey = block.descKey,
+				titleLabel = cardTitle,
+				descLabel = cardDesc,
+			})
+		end
+
+		local confirmBtn = Instance.new("TextButton")
+		confirmBtn.Name = "WelcomeConfirmBtn"
+		confirmBtn.Size = UDim2.fromOffset(250, 40)
+		confirmBtn.AnchorPoint = Vector2.new(0.5, 1)
+		confirmBtn.Position = UDim2.new(0.5, 0, 1, -14)
+		confirmBtn.BackgroundColor3 = Color3.fromRGB(36, 128, 76)
+		confirmBtn.BorderSizePixel = 0
+		confirmBtn.Font = Enum.Font.GothamBold
+		confirmBtn.TextSize = 14
+		confirmBtn.TextColor3 = Color3.fromRGB(255, 252, 240)
+		confirmBtn.AutoButtonColor = false
+		confirmBtn.ZIndex = 12
+		confirmBtn.Parent = guideModal
+		styleL2Frame(confirmBtn, 6, L2_GOLD_BORDER, 1.6)
+		welcomeUI.confirmBtn = confirmBtn
+
+		confirmBtn.MouseEnter:Connect(function()
+			confirmBtn.BackgroundColor3 = Color3.fromRGB(48, 152, 92)
+		end)
+		confirmBtn.MouseLeave:Connect(function()
+			confirmBtn.BackgroundColor3 = Color3.fromRGB(36, 128, 76)
+		end)
+		confirmBtn.Activated:Connect(function()
+			guideModal.Visible = false
 		end)
 	end
 
@@ -4437,6 +4789,13 @@ local function buildInterface()
 	btnStats.Activated:Connect(function()
 		toggleModal(workshopUI.statsModal)
 	end)
+	if welcomeUI.btnHelp then
+		welcomeUI.btnHelp.Activated:Connect(function()
+			if welcomeUI.modal then
+				toggleModal(welcomeUI.modal)
+			end
+		end)
+	end
 	btnLang.Activated:Connect(function()
 		local nextLang: I18n.Language = if I18n.GetLanguage() == "ru" then "en" else "ru"
 		I18n.SetLanguage(nextLang)
@@ -4522,6 +4881,69 @@ local function updateRadarMinimap()
 	end
 end
 
+function UIController.OpenNpcWindow(windowType: string): boolean
+	if not initialized then
+		return false
+	end
+	if creationUI.charCreationScreen and creationUI.charCreationScreen.Visible then
+		return false
+	end
+
+	if windowType == "Merchant" or windowType == "Blacksmith" or windowType == "Workshop" then
+		activeInventoryTab = "Workshop"
+		applyWorkshopFocus(if windowType == "Merchant" or windowType == "Blacksmith" then windowType else nil)
+		inventoryModal.Visible = true
+		if workshopUI.bringWindowToFront then
+			workshopUI.bringWindowToFront(inventoryModal)
+		end
+		refreshModals()
+		return true
+	elseif windowType == "Job" then
+		jobUI.previewedJobClassId = playerState.classId
+		jobUI.jobModalFrame.Visible = true
+		if workshopUI.bringWindowToFront then
+			workshopUI.bringWindowToFront(jobUI.jobModalFrame)
+		end
+		refreshModals()
+		return true
+	end
+
+	return false
+end
+
+function UIController.CloseNpcWindow(windowType: string?)
+	if not initialized then
+		return
+	end
+
+	if windowType == nil or windowType == "Merchant" or windowType == "Blacksmith" or windowType == "Workshop" then
+		applyWorkshopFocus(nil)
+		hoveredTooltipData = nil
+		if itemTooltipFrame then
+			itemTooltipFrame.Visible = false
+		end
+		if inventoryModal then
+			inventoryModal.Visible = false
+		end
+	elseif windowType == "Job" then
+		if jobUI.jobModalFrame then
+			jobUI.jobModalFrame.Visible = false
+		end
+	end
+end
+
+function UIController.IsNpcWindowOpen(windowType: string?): boolean
+	if not initialized then
+		return false
+	end
+
+	if windowType == "Job" then
+		return jobUI.jobModalFrame ~= nil and jobUI.jobModalFrame.Visible
+	end
+
+	return inventoryModal ~= nil and inventoryModal.Visible and activeInventoryTab == "Workshop"
+end
+
 function UIController.Init()
 	if initialized then
 		return
@@ -4600,6 +5022,10 @@ function UIController.Init()
 			toggleModal(jobUI.jobModalFrame)
 		elseif input.KeyCode == Enum.KeyCode.C then
 			toggleModal(workshopUI.statsModal)
+		elseif input.KeyCode == Enum.KeyCode.H then
+			if welcomeUI.modal then
+				toggleModal(welcomeUI.modal)
+			end
 		elseif input.KeyCode == Enum.KeyCode.Z then
 			Remotes.ToggleAutoSoulshot:FireServer()
 		elseif input.KeyCode == Enum.KeyCode.Two then
@@ -5029,9 +5455,19 @@ function UIController.Init()
 			inventoryModal.Visible = false
 			jobUI.jobModalFrame.Visible = false
 			workshopUI.statsModal.Visible = false
+			if welcomeUI.modal then
+				welcomeUI.modal.Visible = false
+			end
 			creationUI.charCreationScreen.Visible = true
 		else
 			creationUI.charCreationScreen.Visible = false
+			if not welcomeUI.hasShownInitialGuide and welcomeUI.modal then
+				welcomeUI.hasShownInitialGuide = true
+				welcomeUI.modal.Visible = true
+				if workshopUI.bringWindowToFront then
+					workshopUI.bringWindowToFront(welcomeUI.modal)
+				end
+			end
 		end
 
 		refreshPlayerHud()
@@ -5050,25 +5486,7 @@ function UIController.Init()
 
 	-- Interactive 3D NPC Window Opener Listener (Multi-Window Compatible)
 	Remotes.OpenNpcWindow.OnClientEvent:Connect(function(windowType: string)
-		if creationUI.charCreationScreen and creationUI.charCreationScreen.Visible then
-			return
-		end
-
-		if windowType == "Workshop" then
-			activeInventoryTab = "Workshop"
-			inventoryModal.Visible = true
-			if workshopUI.bringWindowToFront then
-				workshopUI.bringWindowToFront(inventoryModal)
-			end
-			refreshModals()
-		elseif windowType == "Job" then
-			jobUI.previewedJobClassId = playerState.classId
-			jobUI.jobModalFrame.Visible = true
-			if workshopUI.bringWindowToFront then
-				workshopUI.bringWindowToFront(jobUI.jobModalFrame)
-			end
-			refreshModals()
-		end
+		UIController.OpenNpcWindow(windowType)
 	end)
 
 	-- Enchant Result Visual Flash Listener
@@ -5139,6 +5557,22 @@ function UIController.Init()
 				end
 				if type(rawParams.itemKey) == "string" then
 					params.item = I18n.t(rawParams.itemKey)
+				end
+				if type(rawParams.stationRu) == "string" or type(rawParams.stationEn) == "string" then
+					local ruName = if type(rawParams.stationRu) == "string" and #rawParams.stationRu > 0
+						then rawParams.stationRu
+						else nil
+					local enName = if type(rawParams.stationEn) == "string" and #rawParams.stationEn > 0
+						then rawParams.stationEn
+						else nil
+					local fallbackId = if type(rawParams.stationId) == "string"
+						then rawParams.stationId
+						else tostring(rawParams.station or "")
+					if I18n.GetLanguage() == "ru" then
+						params.station = ruName or enName or fallbackId
+					else
+						params.station = enName or ruName or fallbackId
+					end
 				end
 			end
 

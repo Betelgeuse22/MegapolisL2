@@ -14,6 +14,8 @@ local VFXController = require(script.Parent:WaitForChild("VFXController"))
 local TargetController = require(script.Parent:WaitForChild("TargetController"))
 local CombatController = require(script.Parent:WaitForChild("CombatController"))
 local UIController = require(script.Parent:WaitForChild("UIController"))
+local NPCController = require(script.Parent:WaitForChild("NPCController"))
+local UBahnController = require(script.Parent:WaitForChild("UBahnController"))
 
 local sysOk, sysLocale = pcall(function(): string
 	return LocalizationService.SystemLocaleId
@@ -54,5 +56,7 @@ VFXController.Init()
 TargetController.Init()
 CombatController.Init()
 UIController.Init()
+NPCController.Init()
+UBahnController.Init()
 
 print("=== [MegapolisL2 Client Phase 0, Phase 1 & Phase 2 Initialized] ===")

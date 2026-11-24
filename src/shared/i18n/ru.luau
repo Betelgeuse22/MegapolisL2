@@ -52,6 +52,7 @@ local ru: { [string]: string } = {
 	UI_BTN_INVENTORY = "[I] Инвентарь",
 	UI_BTN_JOB = "[J] Профессия",
 	UI_BTN_STATS = "[C] Статы",
+	UI_BTN_HELP = "[H] Помощь",
 	UI_BTN_LANG = "[RU/EN] {lang}",
 	UI_MODAL_INVENTORY = "[I] Инвентарь, Заточка и Киоск",
 	UI_MODAL_STATS = "Характеристики Персонажа",
@@ -457,8 +458,41 @@ local ru: { [string]: string } = {
 	LOG_PK_COMMITTED = "[PK] ☠ ВЫ СОВЕРШИЛИ PK (Убийство мирного {victim})! Имя стало КРАСНЫМ! (+240 Кармы, Всего Кармы: {karma}, PK: {pk})",
 	LOG_KARMA_WASHED = "[Карма] Очищено -60 Кармы за убийство моба! Осталось Кармы: {karma}.",
 	LOG_GUARD_PK_STRIKE = "[Охрана Вокзала] ⚡ «Стоять, убийца {player}! Карма: {karma}!» Страж наносит {dmg} урона!",
+	LOG_GUARD_PK_AGGRO = "[Охрана Вокзала] ⚡ «Стоять, преступник {player}! Охрана идёт за тобой!»",
 	LOG_PK_ITEM_DROPPED = "[Штраф PK] ✖ Из-за Красного имени (Карма: {karma}) при смерти вы потеряли предмет из сумки: {item}!",
 	LOG_DEV_PVP_CLEARED = "[Dev] Карма сброшена до 0 и Флаг PvP снят! Ваше имя снова Белое.",
+
+	-- U-Bahn Teleport Network
+	UI_UBAHN_TITLE = "СЕТЬ МЕТРО U-BAHN",
+	UI_UBAHN_CURRENT_STATION = "Текущая станция: {station}",
+	UI_UBAHN_EMPTY = "Нет доступных станций для пересадки.",
+	UI_UBAHN_MIN_LEVEL = "Мин. Ур. {lv}",
+	UI_UBAHN_TELEPORT_BTN = "Ехать",
+	UI_UBAHN_CAT_SAFE = "МИРНАЯ",
+	UI_UBAHN_CAT_FARM = "ФАРМ",
+	UI_UBAHN_CAT_RB = "РЕЙД-БОСС",
+	UI_UBAHN_HINT = "Выберите станцию назначения. Выйдите из зоны входа, чтобы закрыть меню.",
+	LOG_UBAHN_TELEPORTED = "[U-Bahn] Прибытие на станцию: {station}.",
+	LOG_UBAHN_MIN_LEVEL = "[U-Bahn] Для станции {station} требуется Уровень {minLv}+ (ваш уровень: {curLv}).",
+	LOG_UBAHN_NOT_FOUND = "[U-Bahn] Станция не найдена или временно недоступна.",
+
+	-- NPC Interactions (ProximityPrompt)
+	UI_NPC_ACTION_MERCHANT = "Торговать",
+	UI_NPC_ACTION_BLACKSMITH = "Заточка",
+	UI_NPC_ACTION_DEFAULT = "Поговорить",
+
+	-- Welcome Guide Modal
+	UI_WELCOME_GUIDE_TITLE = "Добро пожаловать в MegapolisL2",
+	UI_WELCOME_GUIDE_SUBTITLE = "Краткий гид по игре • Открыть снова в любой момент: [H]",
+	UI_WELCOME_GUIDE_CONFIRM = "Понятно, в игру!",
+	UI_GUIDE_COMBAT_TITLE = "Бой и Энергетики",
+	UI_GUIDE_COMBAT_DESC = "Клик — цель, 1 — атака, Q/E/R/F — скиллы, Z — авто-энергетики (x2 урон).",
+	UI_GUIDE_UBAHN_TITLE = "Метро U-Bahn",
+	UI_GUIDE_UBAHN_DESC = "Спуск в метро открывает быстрый телепорт по фарм-зонам и Рейд-Боссам.",
+	UI_GUIDE_NPC_TITLE = "Торговец и Кузнец",
+	UI_GUIDE_NPC_DESC = "На Центральном вокзале покупай расходники у Маркуса и точи экипировку у Грома (клавиша E).",
+	UI_GUIDE_ZONES_TITLE = "Мирные и Боевые зоны",
+	UI_GUIDE_ZONES_DESC = "Вокзал — безопасная зона, за его пределами — фарм, Рейд-Боссы и PvP.",
 }
 
 return ru

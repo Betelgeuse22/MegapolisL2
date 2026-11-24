@@ -297,7 +297,7 @@ type ZoneMobEntry = {
 	count: number,
 }
 
--- Real Tier 1 mobs (MobsConfig) mapped to workspace.Map.Spawners zones
+-- Fallback Tier 1 farm zone definitions (non-boss mobs) for spawners without MobName/MobTier attributes
 local TIER1_ZONE_SPAWNS: { [string]: { ZoneMobEntry } } = {
 	Tier1_McDonalds = {
 		{ mobId = "SleepingCommuter", count = 4 },
@@ -307,9 +307,98 @@ local TIER1_ZONE_SPAWNS: { [string]: { ZoneMobEntry } } = {
 	Tier1_RailwayTracks = {
 		{ mobId = "CardboardKnight", count = 4 },
 		{ mobId = "TicketInspector", count = 4 },
-		{ mobId = "PlatformBaron", count = 1 },
 	},
 }
+
+local function isRaidBossMob(mobData: MobsConfig.MobData): boolean
+	local raw = mobData :: any
+	return raw.isRaidBoss == true or raw.IsRaidBoss == true or raw.isBoss == true or raw.IsBoss == true
+end
+
+local function getMobTier(mobData: MobsConfig.MobData): number
+	local raw = mobData :: any
+	if type(raw.tier) == "number" then
+		return math.max(1, math.floor(raw.tier))
+	end
+	if type(raw.Tier) == "number" then
+		return math.max(1, math.floor(raw.Tier))
+	end
+	return math.max(1, math.ceil(mobData.level / 10))
+end
+
+local function getSpawnerMobName(spawnerPart: BasePart): string?
+	local raw = spawnerPart:GetAttribute("MobName")
+	if type(raw) == "string" then
+		local trimmed = string.match(raw, "^%s*(.-)%s*$")
+		if trimmed and #trimmed > 0 then
+			return trimmed
+		end
+	end
+	return nil
+end
+
+local function parseMobTier(raw: any): number?
+	if type(raw) == "number" then
+		return math.max(1, math.floor(raw))
+	elseif type(raw) == "string" then
+		local digits = string.match(raw, "%d+")
+		if digits then
+			local num = tonumber(digits)
+			if num then
+				return math.max(1, math.floor(num))
+			end
+		end
+	end
+	return nil
+end
+
+local function getSpawnerMobCount(spawnerPart: BasePart, defaultCount: number): number
+	local raw = spawnerPart:GetAttribute("MaxMobs")
+		or spawnerPart:GetAttribute("MobCount")
+		or spawnerPart:GetAttribute("Count")
+	if type(raw) == "number" and raw >= 1 then
+		return math.floor(raw)
+	end
+	return defaultCount
+end
+
+local function getNonBossMobPoolForTier(tier: number): { string }
+	local tierPool: { string } = {}
+	local allNonBossPool: { string } = {}
+
+	for mobId, mobData in pairs(MobsConfig) do
+		if not isRaidBossMob(mobData) then
+			table.insert(allNonBossPool, mobId)
+			if getMobTier(mobData) == tier then
+				table.insert(tierPool, mobId)
+			end
+		end
+	end
+
+	if #tierPool > 0 then
+		return tierPool
+	end
+	return allNonBossPool
+end
+
+local function pickRespawnMobId(spawnerPart: BasePart, fallbackMobId: string): string
+	-- Priority 1: Explicit non-empty MobName attribute strictly overrides MobTier random pool
+	local explicitMobName = getSpawnerMobName(spawnerPart)
+	if explicitMobName then
+		return explicitMobName
+	end
+
+	-- Priority 2: Random pool by MobTier (strictly excluding all Raid Bosses)
+	local mobTier = parseMobTier(spawnerPart:GetAttribute("MobTier"))
+	if mobTier then
+		local pool = getNonBossMobPoolForTier(mobTier)
+		if #pool > 0 then
+			return pool[math.random(1, #pool)]
+		end
+	end
+
+	return fallbackMobId
+end
 
 local SPAWN_RAYCAST_HEIGHT_OFFSET = 60
 local SPAWN_RAYCAST_DEPTH = 120
@@ -547,7 +636,7 @@ function MobSpawnerService.SpawnMobInZone(spawnerPart: BasePart, mobId: string):
 end
 
 function MobSpawnerService.SpawnMobAt(spawnPoint: BasePart, overrideMobId: string?): Model?
-	local mobIdAttr = overrideMobId or spawnPoint:GetAttribute("MobId")
+	local mobIdAttr = overrideMobId or getSpawnerMobName(spawnPoint) or spawnPoint:GetAttribute("MobId")
 	if type(mobIdAttr) ~= "string" then
 		return nil
 	end
@@ -784,9 +873,14 @@ function MobSpawnerService.HandleMobDeath(mobModel: Model)
 	end)
 
 	if spawnPoint then
-		task.delay(respawnTime, function()
+		local customRespawn = spawnPoint:GetAttribute("RespawnTime")
+		local effectiveRespawn = if type(customRespawn) == "number" and customRespawn > 0
+			then customRespawn
+			else respawnTime
+		task.delay(effectiveRespawn, function()
 			if spawnPoint and spawnPoint.Parent then
-				MobSpawnerService.SpawnMobInZone(spawnPoint, respawnMobId)
+				local nextMobId = pickRespawnMobId(spawnPoint, respawnMobId)
+				MobSpawnerService.SpawnMobInZone(spawnPoint, nextMobId)
 			end
 		end)
 	end
@@ -973,29 +1067,80 @@ function MobSpawnerService.Init()
 		then (mapFolder:FindFirstChild("Spawners") or mapFolder:WaitForChild("Spawners", 3))
 		else nil
 
-	if spawnersFolder then
-		for zoneName, mobEntries in pairs(TIER1_ZONE_SPAWNS) do
-			local spawnerObj = spawnersFolder:FindFirstChild(zoneName)
-			if spawnerObj and spawnerObj:IsA("BasePart") then
-				spawnerObj.CanCollide = false
-				spawnerObj.CanQuery = false
-				for _, entry in ipairs(mobEntries) do
+	local function initializeSpawnerPart(spawnerObj: Instance)
+		if not spawnerObj:IsA("BasePart") then
+			return
+		end
+
+		spawnerObj.CanCollide = false
+		spawnerObj.CanQuery = false
+		spawnerObj.Transparency = 1
+
+		-- 1) Explicit non-empty MobName: strictly spawn only this mob (ignore MobTier random pool)
+		local explicitMobName = getSpawnerMobName(spawnerObj)
+		if explicitMobName then
+			local mobData = MobsConfig[explicitMobName]
+			if not mobData then
+				warn(
+					string.format(
+						"[MobSpawnerService] Spawner '%s' has unknown MobName '%s'",
+						spawnerObj.Name,
+						explicitMobName
+					)
+				)
+				return
+			end
+			local defaultCount = if isRaidBossMob(mobData) then 1 else 3
+			local count = getSpawnerMobCount(spawnerObj, defaultCount)
+			for _ = 1, count do
+				MobSpawnerService.SpawnMobInZone(spawnerObj, explicitMobName)
+			end
+			return
+		end
+
+		-- 2) Empty MobName + MobTier: random non-boss mobs from the tier pool
+		local mobTier = parseMobTier(spawnerObj:GetAttribute("MobTier"))
+		if mobTier then
+			local pool = getNonBossMobPoolForTier(mobTier)
+			if #pool == 0 then
+				warn(
+					string.format(
+						"[MobSpawnerService] No non-boss mobs available for spawner '%s' (MobTier=%d)",
+						spawnerObj.Name,
+						mobTier
+					)
+				)
+				return
+			end
+			local count = getSpawnerMobCount(spawnerObj, 5)
+			for _ = 1, count do
+				local chosenMobId = pool[math.random(1, #pool)]
+				MobSpawnerService.SpawnMobInZone(spawnerObj, chosenMobId)
+			end
+			return
+		end
+
+		-- 3) Legacy zone fallback (strictly excluding Raid Bosses)
+		local zoneEntries = TIER1_ZONE_SPAWNS[spawnerObj.Name]
+		if zoneEntries then
+			for _, entry in ipairs(zoneEntries) do
+				local mobData = MobsConfig[entry.mobId]
+				if mobData and not isRaidBossMob(mobData) then
 					for _ = 1, entry.count do
 						MobSpawnerService.SpawnMobInZone(spawnerObj, entry.mobId)
 					end
 				end
-				spawnerObj.Transparency = 1
-			else
-				warn(
-					string.format(
-						"[MobSpawnerService] Spawner zone BasePart '%s' not found in workspace.Map.Spawners",
-						zoneName
-					)
-				)
 			end
 		end
+	end
+
+	if spawnersFolder then
+		for _, child in ipairs(spawnersFolder:GetChildren()) do
+			initializeSpawnerPart(child)
+		end
+		spawnersFolder.ChildAdded:Connect(initializeSpawnerPart)
 	else
-		warn("[MobSpawnerService] workspace.Map.Spawners not found; skipping Tier 1 mob spawn.")
+		warn("[MobSpawnerService] workspace.Map.Spawners not found; skipping mob spawn.")
 	end
 
 	task.spawn(function()

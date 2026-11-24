@@ -17,6 +17,8 @@ local MobSpawnerService = require(script.Parent:WaitForChild("MobSpawnerService"
 local PartyService = require(script.Parent:WaitForChild("PartyService"))
 local CombatService = require(script.Parent:WaitForChild("CombatService"))
 local SkillService = require(script.Parent:WaitForChild("SkillService"))
+local UBahnService = require(script.Parent:WaitForChild("UBahnService"))
+local GuardService = require(script.Parent:WaitForChild("GuardService"))
 
 print("=== [MegapolisL2 Server Self-Test] ===")
 print(string.format("Remotes initialized inside ReplicatedStorage.%s", Remotes.Folder.Name))
@@ -93,5 +95,7 @@ MobSpawnerService.Init()
 PartyService.Init()
 CombatService.Init()
 SkillService.Init()
+UBahnService.Init()
+GuardService.Init()
 
 print("=== [MegapolisL2 Server Phase 4C (Party System, AI Companions, PvP & PK Karma) Initialized] ===")

@@ -36,6 +36,7 @@ local REMOTE_NAMES = {
 	"PartyRespond",
 	"PartyLeave",
 	"PartyUpdated",
+	"RequestUBahnTeleport",
 }
 
 local function getOrCreateRemotesFolder(): Folder
@@ -109,6 +110,7 @@ local Remotes = {
 	PartyRespond = getOrCreateRemoteEvent(remotesFolder, "PartyRespond"),
 	PartyLeave = getOrCreateRemoteEvent(remotesFolder, "PartyLeave"),
 	PartyUpdated = getOrCreateRemoteEvent(remotesFolder, "PartyUpdated"),
+	RequestUBahnTeleport = getOrCreateRemoteEvent(remotesFolder, "RequestUBahnTeleport"),
 }
 
 return Remotes

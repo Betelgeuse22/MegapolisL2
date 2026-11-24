@@ -52,6 +52,7 @@ local en: { [string]: string } = {
 	UI_BTN_INVENTORY = "[I] Inventory",
 	UI_BTN_JOB = "[J] Job",
 	UI_BTN_STATS = "[C] Stats",
+	UI_BTN_HELP = "[H] Help",
 	UI_BTN_LANG = "[RU/EN] {lang}",
 	UI_MODAL_INVENTORY = "[I] Inventory, Enchanting & Kiosk",
 	UI_MODAL_STATS = "Character Combat Stats",
@@ -457,8 +458,41 @@ local en: { [string]: string } = {
 	LOG_PK_COMMITTED = "[PK] ☠ YOU COMMITTED A PK (Killed unflagged {victim})! Your name turned RED! (+240 Karma, Total Karma: {karma}, PK: {pk})",
 	LOG_KARMA_WASHED = "[Karma] Washed away -60 Karma from hunting! Remaining Karma: {karma}.",
 	LOG_GUARD_PK_STRIKE = "[Station Guard] ⚡ 'Halt, criminal {player}! Karma: {karma}!' Guard strikes for {dmg} damage!",
+	LOG_GUARD_PK_AGGRO = "[Station Guard] ⚡ 'Halt, criminal {player}! The Guard is coming for you!'",
 	LOG_PK_ITEM_DROPPED = "[PK Penalty] ✖ Due to Red PK status (Karma: {karma}), you dropped an item from your bag upon death: {item}!",
 	LOG_DEV_PVP_CLEARED = "[Dev] Karma reset to 0 and PvP Flag cleared! Your name is White again.",
+
+	-- U-Bahn Teleport Network
+	UI_UBAHN_TITLE = "U-BAHN TRANSIT NETWORK",
+	UI_UBAHN_CURRENT_STATION = "Current Station: {station}",
+	UI_UBAHN_EMPTY = "No other stations available.",
+	UI_UBAHN_MIN_LEVEL = "Min Lv. {lv}",
+	UI_UBAHN_TELEPORT_BTN = "Travel",
+	UI_UBAHN_CAT_SAFE = "SAFE",
+	UI_UBAHN_CAT_FARM = "FARM",
+	UI_UBAHN_CAT_RB = "RAID BOSS",
+	UI_UBAHN_HINT = "Select a destination station. Step out of the entrance trigger to close.",
+	LOG_UBAHN_TELEPORTED = "[U-Bahn] Arrived at station: {station}.",
+	LOG_UBAHN_MIN_LEVEL = "[U-Bahn] Station {station} requires Level {minLv}+ (your level: {curLv}).",
+	LOG_UBAHN_NOT_FOUND = "[U-Bahn] Destination station not found or unavailable.",
+
+	-- NPC Interactions (ProximityPrompt)
+	UI_NPC_ACTION_MERCHANT = "Trade",
+	UI_NPC_ACTION_BLACKSMITH = "Enchant",
+	UI_NPC_ACTION_DEFAULT = "Talk",
+
+	-- Welcome Guide Modal
+	UI_WELCOME_GUIDE_TITLE = "Welcome to MegapolisL2",
+	UI_WELCOME_GUIDE_SUBTITLE = "Quick Starter Guide • Reopen anytime with [H]",
+	UI_WELCOME_GUIDE_CONFIRM = "Got it, let's play!",
+	UI_GUIDE_COMBAT_TITLE = "Combat & Energy Shots",
+	UI_GUIDE_COMBAT_DESC = "Click — target, 1 — attack, Q/E/R/F — skills, Z — auto Energy Shots (x2 damage).",
+	UI_GUIDE_UBAHN_TITLE = "U-Bahn Metro",
+	UI_GUIDE_UBAHN_DESC = "Enter the metro to fast-travel across farming zones and Raid Bosses.",
+	UI_GUIDE_NPC_TITLE = "Merchant & Blacksmith",
+	UI_GUIDE_NPC_DESC = "At Central Station, buy supplies from Marcus and enchant gear at Grom (press E).",
+	UI_GUIDE_ZONES_TITLE = "Peace & Combat Zones",
+	UI_GUIDE_ZONES_DESC = "The station is a safe zone; outside awaits farming, Raid Bosses, and PvP.",
 }
 
 return en
